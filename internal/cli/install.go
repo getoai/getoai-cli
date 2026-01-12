@@ -6,12 +6,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/getoai/getoai-cli/internal/config"
 	"github.com/getoai/getoai-cli/internal/installer"
 	"github.com/getoai/getoai-cli/internal/platform"
 	"github.com/getoai/getoai-cli/internal/tools"
 	"github.com/getoai/getoai-cli/internal/util"
-	"github.com/spf13/cobra"
 )
 
 var installCmd = &cobra.Command{

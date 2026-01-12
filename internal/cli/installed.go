@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/getoai/getoai-cli/internal/tools"
 	"github.com/spf13/cobra"
+
+	"github.com/getoai/getoai-cli/internal/tools"
 )
 
 var installedCmd = &cobra.Command{

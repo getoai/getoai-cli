@@ -1080,7 +1080,7 @@ func registerOpenRouter() {
 func registerChatGLM() {
 	Register(&Tool{
 		Name:        "chatglm",
-		Description: "Open bilingual dialogue language model",
+		Description: "Open bilingual dialog language model",
 		Category:    CategoryLLM,
 		Website:     "https://github.com/THUDM/ChatGLM-6B",
 		Command:     "",

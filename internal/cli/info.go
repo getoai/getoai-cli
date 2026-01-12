@@ -3,8 +3,9 @@ package cli
 import (
 	"fmt"
 
-	"github.com/getoai/getoai-cli/internal/tools"
 	"github.com/spf13/cobra"
+
+	"github.com/getoai/getoai-cli/internal/tools"
 )
 
 var infoCmd = &cobra.Command{

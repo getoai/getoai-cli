@@ -77,7 +77,7 @@ func Save(cfg *Config) error {
 
 func Get() *Config {
 	if current == nil {
-		Load()
+		_, _ = Load()
 	}
 	return current
 }

@@ -6,10 +6,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/getoai/getoai-cli/internal/installer"
 	"github.com/getoai/getoai-cli/internal/tools"
 	"github.com/getoai/getoai-cli/internal/util"
-	"github.com/spf13/cobra"
 )
 
 var uninstallCmd = &cobra.Command{
@@ -57,7 +58,7 @@ func uninstallTool(name string) {
 		response, _ := reader.ReadString('\n')
 		response = strings.TrimSpace(strings.ToLower(response))
 		if response != "y" && response != "yes" {
-			printInfo("Uninstall cancelled")
+			printInfo("Uninstall canceled")
 			return
 		}
 	}
