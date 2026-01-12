@@ -250,8 +250,9 @@ func (d *DockerInstaller) IsAvailable() bool {
 	return d.platform.HasDocker
 }
 
-// CheckDockerAvailable checks if Docker is available and shows install hint if not
+// CheckDockerAvailable checks if Docker is available and running
 func CheckDockerAvailable() bool {
+	// Check if docker command exists
 	if _, err := exec.LookPath("docker"); err != nil {
 		fmt.Println()
 		fmt.Println("\033[33mDocker is not installed.\033[0m")
@@ -261,6 +262,29 @@ func CheckDockerAvailable() bool {
 		fmt.Println()
 		fmt.Println("Or install manually from: https://www.docker.com")
 		fmt.Println()
+		return false
+	}
+
+	// Check if Docker daemon is running
+	out, err := exec.Command("docker", "info").CombinedOutput()
+	if err != nil {
+		fmt.Println()
+		fmt.Println("\033[33mDocker is installed but not running.\033[0m")
+		fmt.Println()
+		// Check for common error messages
+		outStr := string(out)
+		if strings.Contains(outStr, "Cannot connect to the Docker daemon") ||
+			strings.Contains(outStr, "Is the docker daemon running") ||
+			strings.Contains(outStr, "permission denied") {
+			fmt.Println("Please start Docker Desktop or the Docker service:")
+			fmt.Println()
+			fmt.Println("  macOS/Windows: Start Docker Desktop application")
+			fmt.Println("  Linux:         sudo systemctl start docker")
+			fmt.Println()
+		} else {
+			fmt.Printf("Error: %s\n", strings.TrimSpace(outStr))
+			fmt.Println()
+		}
 		return false
 	}
 	return true
@@ -287,16 +311,25 @@ func CheckDockerComposeAvailable() bool {
 }
 
 func (d *DockerInstaller) Install(image string, args ...string) error {
-	// Just pull the image
+	// Check if Docker is running first
+	if !CheckDockerAvailable() {
+		return fmt.Errorf("docker is required but not running")
+	}
+
+	// Pull the image
 	allArgs := append([]string{"pull", image}, args...)
-	return d.RunCommand("docker", allArgs...)
+	if err := d.RunCommand("docker", allArgs...); err != nil {
+		showDockerMirrorHelp()
+		return err
+	}
+	return nil
 }
 
 // InstallAndRun pulls the image and runs the container in the background
 func (d *DockerInstaller) InstallAndRun(image string, containerName string, ports []string, env map[string]string, volumes []string) error {
 	// Check dependencies
 	if !CheckDockerAvailable() {
-		return fmt.Errorf("docker is required but not installed")
+		return fmt.Errorf("docker is required but not running")
 	}
 
 	// First pull the image
@@ -369,10 +402,10 @@ func (d *DockerInstaller) InstallAndRun(image string, containerName string, port
 func (d *DockerInstaller) InstallWithCompose(repoURL string, appName string) error {
 	// Check dependencies
 	if !CheckDockerAvailable() {
-		return fmt.Errorf("docker is required but not installed")
+		return fmt.Errorf("docker is required but not running")
 	}
 	if !CheckDockerComposeAvailable() {
-		return fmt.Errorf("docker-compose is required but not installed")
+		return fmt.Errorf("docker-compose is required but not available")
 	}
 
 	// Get install directory
