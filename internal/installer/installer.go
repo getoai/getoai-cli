@@ -310,7 +310,7 @@ func (d *DockerInstaller) InstallAndRun(image string, containerName string, port
 	out, _ := d.RunCommandSilent("docker", "ps", "-a", "--filter", fmt.Sprintf("name=^%s$", containerName), "--format", "{{.Names}}")
 	if strings.TrimSpace(out) == containerName {
 		fmt.Printf("Container '%s' already exists. Removing...\n", containerName)
-		d.RunCommandSilent("docker", "rm", "-f", containerName)
+		_, _ = d.RunCommandSilent("docker", "rm", "-f", containerName)
 	}
 
 	// Build run command
@@ -559,7 +559,7 @@ func (d *DockerInstaller) Uninstall(image string) error {
 
 // StopContainer stops and removes a container by name
 func (d *DockerInstaller) StopContainer(containerName string) error {
-	d.RunCommandSilent("docker", "stop", containerName)
+	_, _ = d.RunCommandSilent("docker", "stop", containerName)
 	return d.RunCommand("docker", "rm", containerName)
 }
 
