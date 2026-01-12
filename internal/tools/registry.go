@@ -108,6 +108,7 @@ func init() {
 	registerNode()
 	registerDocker()
 	registerDockerCompose()
+	registerGitHubCLI()
 	// Desktop AI Apps
 	registerCherryStudio()
 	registerChatbox()
@@ -1207,6 +1208,24 @@ func registerDockerCompose() {
 		InstallMethods: map[installer.InstallMethod]InstallConfig{
 			installer.MethodBrew: {Package: "docker-compose"},
 			installer.MethodPip:  {Package: "docker-compose"},
+		},
+	})
+}
+
+func registerGitHubCLI() {
+	Register(&Tool{
+		Name:        "gh",
+		Description: "GitHub CLI - work with GitHub from the command line",
+		Category:    CategoryUtility,
+		Website:     "https://cli.github.com",
+		Command:     "gh",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodBrew: {Package: "gh"},
+		},
+		PlatformOverrides: map[string]map[installer.InstallMethod]InstallConfig{
+			"linux": {
+				installer.MethodApt: {Package: "gh"},
+			},
 		},
 	})
 }
