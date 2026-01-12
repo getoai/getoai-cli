@@ -1,6 +1,6 @@
 # Binaries
-getoai
-getoai.exe
+/getoai
+/getoai.exe
 *.exe
 *.exe~
 *.dll
