@@ -20,10 +20,14 @@ var installCmd = &cobra.Command{
 	Short: "Install AI tools",
 	Long: `Install one or more AI tools.
 
+When multiple installation methods are available, you'll be prompted
+to choose your preferred method. Use --method to skip the prompt.
+
 Examples:
   getoai install ollama
   getoai install claude-code aider
-  getoai install ollama --method brew`,
+  getoai install ollama --method brew
+  getoai install ollama --method docker`,
 	Args: cobra.MinimumNArgs(1),
 	Run:  runInstall,
 }
@@ -47,6 +51,35 @@ func runInstall(cmd *cobra.Command, args []string) {
 		installTool(toolName)
 		fmt.Println()
 	}
+}
+
+// promptMethodSelection shows an interactive menu for selecting install method
+func promptMethodSelection(toolName string, availableMethods []installer.InstallMethod) (installer.InstallMethod, error) {
+	if len(availableMethods) == 0 {
+		return "", fmt.Errorf("no methods available")
+	}
+
+	if len(availableMethods) == 1 {
+		return availableMethods[0], nil
+	}
+
+	// Build menu options
+	options := make([]string, len(availableMethods))
+	descriptions := make([]string, len(availableMethods))
+
+	for i, method := range availableMethods {
+		options[i] = string(method)
+		descriptions[i] = installer.GetMethodDescription(method)
+	}
+
+	title := fmt.Sprintf("Multiple installation methods available for %s", toolName)
+	choice, err := util.PromptChoice(title, options, descriptions)
+
+	if err != nil {
+		return "", fmt.Errorf("selection cancelled or invalid: %w", err)
+	}
+
+	return availableMethods[choice], nil
 }
 
 func installTool(name string) {
@@ -94,6 +127,9 @@ func installTool(name string) {
 	}
 
 	var method installer.InstallMethod
+	var err error
+
+	// If --method flag is specified, use it (backward compatibility)
 	if installMethod != "" {
 		method = installer.InstallMethod(installMethod)
 		found := false
@@ -109,7 +145,18 @@ func installTool(name string) {
 			return
 		}
 	} else {
-		method = availableMethods[0]
+		// If multiple methods available, show interactive menu
+		if len(availableMethods) > 1 {
+			method, err = promptMethodSelection(name, availableMethods)
+			if err != nil {
+				printError(fmt.Sprintf("Method selection failed: %v", err))
+				return
+			}
+			fmt.Printf("\nSelected installation method: \033[32m%s\033[0m\n\n", method)
+		} else {
+			// Single method available, use it automatically
+			method = availableMethods[0]
+		}
 	}
 
 	// Check dependencies
@@ -127,10 +174,22 @@ func installTool(name string) {
 
 	// Verify installation
 	if tool.IsInstalled() {
-		spinner.Success(fmt.Sprintf("%s installed successfully! (version: %s)", name, tool.GetVersion()))
+		version := tool.GetVersion()
+		if version == "N/A" || version == "not installed" {
+			// Desktop app without version info
+			spinner.Success(fmt.Sprintf("%s installed successfully!", name))
+		} else {
+			spinner.Success(fmt.Sprintf("%s installed successfully! (version: %s)", name, version))
+		}
 	} else {
-		spinner.Info(fmt.Sprintf("%s installation completed, but command not found in PATH", name))
-		showPathHint(method)
+		// For desktop apps (with AppName), show different message
+		if tool.AppName != "" {
+			spinner.Info(fmt.Sprintf("%s installation completed", name))
+			fmt.Println("  Desktop app installed, you may need to restart Finder or reboot to see it")
+		} else {
+			spinner.Info(fmt.Sprintf("%s installation completed, but command not found in PATH", name))
+			showPathHint(method)
+		}
 	}
 }
 

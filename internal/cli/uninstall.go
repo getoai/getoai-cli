@@ -80,6 +80,15 @@ func uninstallTool(name string) {
 				return
 			}
 		}
+	} else if tool.IsDockerContainerInstalled() {
+		// Handle docker container installations
+		dockerInst := installer.NewDockerInstaller()
+		config := tool.InstallMethods[installer.MethodDocker]
+		uninstallErr = dockerInst.StopContainer(config.DockerName)
+		if uninstallErr == nil {
+			spinner.Success(fmt.Sprintf("%s uninstalled successfully", name))
+			return
+		}
 	} else {
 		// Try to find the appropriate uninstaller for non-compose tools
 		for method := range tool.InstallMethods {
@@ -87,6 +96,20 @@ func uninstallTool(name string) {
 			if err != nil {
 				continue
 			}
+
+			// For download method (desktop apps), pass AppName as additional arg
+			if method == installer.MethodDownload && tool.AppName != "" {
+				if downloadInst, ok := inst.(*installer.DownloadInstaller); ok {
+					if err := downloadInst.Uninstall(tool.Name, tool.AppName); err == nil {
+						uninstallErr = nil
+						break
+					} else {
+						uninstallErr = err
+					}
+					continue
+				}
+			}
+
 			if err := inst.Uninstall(getUninstallPackage(tool, method)); err == nil {
 				uninstallErr = nil
 				break

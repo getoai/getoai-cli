@@ -25,9 +25,31 @@ const (
 	MethodDownload InstallMethod = "download" // Manual download from website
 )
 
+// GetMethodDescription returns a human-friendly description for each install method
+func GetMethodDescription(method InstallMethod) string {
+	descriptions := map[InstallMethod]string{
+		MethodBrew:     "Homebrew package manager (macOS/Linux)",
+		MethodApt:      "APT package manager (Debian/Ubuntu)",
+		MethodNpm:      "NPM package manager (Node.js)",
+		MethodPip:      "Pip package manager (Python)",
+		MethodGo:       "Go install (requires Go toolchain)",
+		MethodScript:   "Installation script (curl/wget)",
+		MethodDocker:   "Docker container",
+		MethodBinary:   "Pre-built binary",
+		MethodDownload: "Manual download and install",
+		MethodChoco:    "Chocolatey package manager (Windows)",
+		MethodScoop:    "Scoop package manager (Windows)",
+	}
+
+	if desc, ok := descriptions[method]; ok {
+		return desc
+	}
+	return string(method)
+}
+
 type Installer interface {
 	Install(name string, args ...string) error
-	Uninstall(name string) error
+	Uninstall(name string, args ...string) error
 	IsAvailable() bool
 	Name() string
 }
@@ -95,7 +117,7 @@ func (s *ScriptInstaller) Install(url string, args ...string) error {
 	return fmt.Errorf("curl not available")
 }
 
-func (s *ScriptInstaller) Uninstall(name string) error {
+func (s *ScriptInstaller) Uninstall(name string, args ...string) error {
 	return fmt.Errorf("script installer does not support uninstall")
 }
 
@@ -119,7 +141,7 @@ func (b *BrewInstaller) Install(name string, args ...string) error {
 	return b.RunCommand("brew", allArgs...)
 }
 
-func (b *BrewInstaller) Uninstall(name string) error {
+func (b *BrewInstaller) Uninstall(name string, args ...string) error {
 	return b.RunCommand("brew", "uninstall", name)
 }
 
@@ -147,7 +169,7 @@ func (a *AptInstaller) Install(name string, args ...string) error {
 	return a.RunCommand("sudo", allArgs...)
 }
 
-func (a *AptInstaller) Uninstall(name string) error {
+func (a *AptInstaller) Uninstall(name string, args ...string) error {
 	return a.RunCommand("sudo", "apt-get", "remove", "-y", name)
 }
 
@@ -171,7 +193,7 @@ func (n *NpmInstaller) Install(name string, args ...string) error {
 	return n.RunCommand("npm", allArgs...)
 }
 
-func (n *NpmInstaller) Uninstall(name string) error {
+func (n *NpmInstaller) Uninstall(name string, args ...string) error {
 	return n.RunCommand("npm", "uninstall", "-g", name)
 }
 
@@ -207,7 +229,7 @@ func (p *PipInstaller) Install(name string, args ...string) error {
 	return p.RunCommand(p.pipCmd(), allArgs...)
 }
 
-func (p *PipInstaller) Uninstall(name string) error {
+func (p *PipInstaller) Uninstall(name string, args ...string) error {
 	return p.RunCommand(p.pipCmd(), "uninstall", "-y", name)
 }
 
@@ -231,7 +253,7 @@ func (g *GoInstaller) Install(name string, args ...string) error {
 	return g.RunCommand("go", allArgs...)
 }
 
-func (g *GoInstaller) Uninstall(name string) error {
+func (g *GoInstaller) Uninstall(name string, args ...string) error {
 	return fmt.Errorf("go installer does not support uninstall, manually remove from $GOPATH/bin")
 }
 
@@ -586,7 +608,7 @@ func showDockerMirrorHelp() {
 	fmt.Println()
 }
 
-func (d *DockerInstaller) Uninstall(image string) error {
+func (d *DockerInstaller) Uninstall(image string, args ...string) error {
 	return d.RunCommand("docker", "rmi", image)
 }
 
@@ -662,18 +684,37 @@ func (d *DownloadInstaller) IsAvailable() bool {
 
 func (d *DownloadInstaller) Install(url string, args ...string) error {
 	appName := ""
+	downloadURL := ""
+	fileType := ""
+
+	// Parse args: [appName, downloadURL, fileType]
 	if len(args) > 0 {
 		appName = args[0]
+	}
+	if len(args) > 1 {
+		downloadURL = args[1]
+	}
+	if len(args) > 2 {
+		fileType = args[2]
 	}
 
 	fmt.Println()
 	fmt.Printf("\033[36m%s is a desktop application.\033[0m\n", appName)
 	fmt.Println()
-	fmt.Println("Please download and install from:")
-	fmt.Printf("  \033[4m%s\033[0m\n", url)
-	fmt.Println()
 
-	// Try to open the URL in browser
+	// If no specific download URL provided, fallback to browser
+	if downloadURL == "" {
+		fmt.Println("Please download and install from:")
+		fmt.Printf("  \033[4m%s\033[0m\n", url)
+		fmt.Println()
+		return d.openBrowser(url)
+	}
+
+	// Download and install
+	return d.downloadAndInstall(appName, downloadURL, fileType)
+}
+
+func (d *DownloadInstaller) openBrowser(url string) error {
 	var cmd *exec.Cmd
 	switch d.platform.OS {
 	case "darwin":
@@ -697,12 +738,376 @@ func (d *DownloadInstaller) Install(url string, args ...string) error {
 	return nil
 }
 
-func (d *DownloadInstaller) Uninstall(name string) error {
+func (d *DownloadInstaller) downloadAndInstall(appName, downloadURL, fileType string) error {
+	// Create temp directory
+	tmpDir := os.TempDir()
+	fileName := getFileNameFromURL(downloadURL)
+	filePath := fmt.Sprintf("%s/%s", tmpDir, fileName)
+
+	// Download file
+	fmt.Printf("Downloading %s...\n", fileName)
 	fmt.Println()
-	fmt.Printf("Please uninstall %s manually:\n", name)
-	fmt.Println("  macOS: Move to Trash from Applications folder")
-	fmt.Println("  Linux: Use your package manager or remove manually")
-	fmt.Println("  Windows: Use Add/Remove Programs")
+
+	if err := d.downloadFile(downloadURL, filePath); err != nil {
+		return fmt.Errorf("failed to download: %w", err)
+	}
+
+	fmt.Println()
+
+	// Install based on file type
+	return d.installFile(filePath, fileType, appName)
+}
+
+func (d *DownloadInstaller) downloadFile(url, filepath string) error {
+	// Use curl with progress bar and follow redirects
+	cmd := exec.Command("curl", "-L", "--progress-bar", "-o", filepath, url)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+
+	// Verify file was downloaded
+	stat, err := os.Stat(filepath)
+	if err != nil {
+		return fmt.Errorf("downloaded file not found: %w", err)
+	}
+
+	// Check if file is too small (likely an error page)
+	if stat.Size() < 1024 {
+		content, _ := os.ReadFile(filepath)
+		return fmt.Errorf("downloaded file too small (%d bytes), possible error: %s", stat.Size(), string(content))
+	}
+
+	fmt.Printf("Downloaded %s (%.2f MB)\n", filepath, float64(stat.Size())/1024/1024)
+
+	return nil
+}
+
+func (d *DownloadInstaller) installFile(filePath, fileType, appName string) error {
+	switch fileType {
+	case "dmg":
+		return d.installDMG(filePath, appName)
+	case "pkg":
+		return d.installPKG(filePath)
+	case "deb":
+		return d.installDEB(filePath)
+	case "appimage":
+		return d.installAppImage(filePath, appName)
+	case "exe":
+		return d.installEXE(filePath)
+	case "msi":
+		return d.installMSI(filePath)
+	default:
+		return fmt.Errorf("unsupported file type: %s", fileType)
+	}
+}
+
+func (d *DownloadInstaller) installDMG(dmgPath, appName string) error {
+	fmt.Println("Installing DMG file...")
+
+	// Mount the DMG
+	fmt.Println("Mounting DMG...")
+	out, err := exec.Command("hdiutil", "attach", dmgPath, "-nobrowse", "-mountrandom", "/tmp").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to mount DMG: %w\n%s", err, string(out))
+	}
+
+	outStr := string(out)
+	fmt.Printf("Mount output: %s\n", outStr)
+
+	// Parse mount point from output - get the last mount point in the output
+	mountPoint := parseMountPointFromHdiutil(outStr)
+	if mountPoint == "" {
+		return fmt.Errorf("failed to find mount point in output: %s", outStr)
+	}
+
+	fmt.Printf("Mount point: %s\n", mountPoint)
+
+	defer func() {
+		fmt.Println("Unmounting DMG...")
+		exec.Command("hdiutil", "detach", mountPoint, "-force").Run()
+	}()
+
+	// Find .app in mount point
+	entries, err := os.ReadDir(mountPoint)
+	if err != nil {
+		return fmt.Errorf("failed to read mount point %s: %w", mountPoint, err)
+	}
+
+	var appPath string
+	for _, entry := range entries {
+		fmt.Printf("Found entry: %s (isDir: %v)\n", entry.Name(), entry.IsDir())
+		if strings.HasSuffix(entry.Name(), ".app") {
+			appPath = fmt.Sprintf("%s/%s", mountPoint, entry.Name())
+			break
+		}
+	}
+
+	if appPath == "" {
+		return fmt.Errorf("no .app file found in DMG, entries: %v", entries)
+	}
+
+	// Copy to Applications
+	destPath := fmt.Sprintf("/Applications/%s", strings.TrimPrefix(appPath, mountPoint+"/"))
+	fmt.Printf("Installing to: %s\n", destPath)
+
+	// Remove existing app if present
+	if _, err := os.Stat(destPath); err == nil {
+		fmt.Println("Removing existing installation...")
+		if err := os.RemoveAll(destPath); err != nil {
+			return fmt.Errorf("failed to remove existing app: %w", err)
+		}
+	}
+
+	if err := exec.Command("cp", "-R", appPath, "/Applications/").Run(); err != nil {
+		return fmt.Errorf("failed to copy app: %w", err)
+	}
+
+	fmt.Println()
+	fmt.Printf("\033[32m✓ %s installed successfully to /Applications\033[0m\n", appName)
+	fmt.Println()
+
+	return nil
+}
+
+func (d *DownloadInstaller) installPKG(pkgPath string) error {
+	fmt.Println("Installing PKG file...")
+	fmt.Println("This requires administrator privileges.")
+	fmt.Println()
+
+	if err := exec.Command("sudo", "installer", "-pkg", pkgPath, "-target", "/").Run(); err != nil {
+		return fmt.Errorf("failed to install PKG: %w", err)
+	}
+
+	fmt.Println()
+	fmt.Println("\033[32m✓ Installation completed\033[0m")
+	fmt.Println()
+
+	return nil
+}
+
+func (d *DownloadInstaller) installDEB(debPath string) error {
+	fmt.Println("Installing DEB package...")
+	fmt.Println("This requires administrator privileges.")
+	fmt.Println()
+
+	if err := exec.Command("sudo", "dpkg", "-i", debPath).Run(); err != nil {
+		// Try to fix dependencies
+		fmt.Println("Fixing dependencies...")
+		_ = exec.Command("sudo", "apt-get", "install", "-f", "-y").Run()
+		return fmt.Errorf("failed to install DEB: %w", err)
+	}
+
+	fmt.Println()
+	fmt.Println("\033[32m✓ Installation completed\033[0m")
+	fmt.Println()
+
+	return nil
+}
+
+func (d *DownloadInstaller) installAppImage(appImagePath, appName string) error {
+	fmt.Println("Installing AppImage...")
+
+	// Make executable
+	if err := os.Chmod(appImagePath, 0755); err != nil {
+		return fmt.Errorf("failed to make executable: %w", err)
+	}
+
+	// Move to user's local bin
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	destDir := fmt.Sprintf("%s/.local/bin", homeDir)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	destPath := fmt.Sprintf("%s/%s.appimage", destDir, appName)
+	if err := os.Rename(appImagePath, destPath); err != nil {
+		return fmt.Errorf("failed to move AppImage: %w", err)
+	}
+
+	fmt.Println()
+	fmt.Printf("\033[32m✓ AppImage installed to: %s\033[0m\n", destPath)
+	fmt.Printf("Make sure %s is in your PATH\n", destDir)
+	fmt.Println()
+
+	return nil
+}
+
+func (d *DownloadInstaller) installEXE(exePath string) error {
+	fmt.Println("Launching installer...")
+	fmt.Println()
+
+	if err := exec.Command(exePath).Run(); err != nil {
+		return fmt.Errorf("failed to launch installer: %w", err)
+	}
+
+	return nil
+}
+
+func (d *DownloadInstaller) installMSI(msiPath string) error {
+	fmt.Println("Installing MSI package...")
+	fmt.Println()
+
+	if err := exec.Command("msiexec", "/i", msiPath).Run(); err != nil {
+		return fmt.Errorf("failed to install MSI: %w", err)
+	}
+
+	return nil
+}
+
+func parseMountPoint(output string) string {
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "/Volumes/") {
+			parts := strings.Fields(line)
+			for _, part := range parts {
+				if strings.HasPrefix(part, "/Volumes/") {
+					return part
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func parseMountPointFromHdiutil(output string) string {
+	// hdiutil output format:
+	// /dev/disk4s2        	Apple_HFS                      	/private/tmp/dmg.XXXXXX
+	// We want the last column which is the mount point
+	lines := strings.Split(output, "\n")
+	var mountPoint string
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Look for lines with Apple_HFS or similar filesystem types
+		if strings.Contains(line, "Apple_HFS") || strings.Contains(line, "Apple_APFS") {
+			// Split by tabs or multiple spaces
+			parts := strings.Fields(line)
+			if len(parts) >= 3 {
+				// The last part should be the mount point
+				mountPoint = parts[len(parts)-1]
+			}
+		}
+
+		// Also check for /tmp or /Volumes paths
+		if (strings.Contains(line, "/tmp/") || strings.Contains(line, "/Volumes/")) && !strings.Contains(line, "/dev/") {
+			parts := strings.Fields(line)
+			for _, part := range parts {
+				if strings.HasPrefix(part, "/tmp/") || strings.HasPrefix(part, "/Volumes/") {
+					mountPoint = part
+				}
+			}
+		}
+	}
+
+	return mountPoint
+}
+
+func getFileNameFromURL(url string) string {
+	parts := strings.Split(url, "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return "download"
+}
+
+func (d *DownloadInstaller) Uninstall(name string, args ...string) error {
+	appName := ""
+	if len(args) > 0 {
+		appName = args[0]
+	}
+
+	// If no app name provided, show manual instructions
+	if appName == "" {
+		fmt.Println()
+		fmt.Printf("Please uninstall %s manually:\n", name)
+		fmt.Println("  macOS: Move to Trash from Applications folder")
+		fmt.Println("  Linux: Use your package manager or remove manually")
+		fmt.Println("  Windows: Use Add/Remove Programs")
+		fmt.Println()
+		return nil
+	}
+
+	// Attempt to uninstall based on platform
+	switch d.platform.OS {
+	case "darwin":
+		return d.uninstallMacOS(appName)
+	case "linux":
+		return d.uninstallLinux(name)
+	case "windows":
+		return d.uninstallWindows(appName)
+	}
+
+	return fmt.Errorf("unsupported platform for automatic uninstall")
+}
+
+func (d *DownloadInstaller) uninstallMacOS(appName string) error {
+	// Check /Applications first
+	appPath := fmt.Sprintf("/Applications/%s", appName)
+	if _, err := os.Stat(appPath); err == nil {
+		fmt.Printf("Removing %s...\n", appPath)
+		if err := os.RemoveAll(appPath); err != nil {
+			return fmt.Errorf("failed to remove app: %w", err)
+		}
+		fmt.Println("\033[32m✓ Application removed successfully\033[0m")
+		return nil
+	}
+
+	// Check ~/Applications
+	homeDir, _ := os.UserHomeDir()
+	userAppPath := fmt.Sprintf("%s/Applications/%s", homeDir, appName)
+	if _, err := os.Stat(userAppPath); err == nil {
+		fmt.Printf("Removing %s...\n", userAppPath)
+		if err := os.RemoveAll(userAppPath); err != nil {
+			return fmt.Errorf("failed to remove app: %w", err)
+		}
+		fmt.Println("\033[32m✓ Application removed successfully\033[0m")
+		return nil
+	}
+
+	return fmt.Errorf("application not found in /Applications or ~/Applications")
+}
+
+func (d *DownloadInstaller) uninstallLinux(name string) error {
+	// Try to uninstall via package manager first
+	if _, err := exec.LookPath("dpkg"); err == nil {
+		fmt.Println("Attempting to remove via dpkg...")
+		if err := exec.Command("sudo", "dpkg", "-r", name).Run(); err == nil {
+			fmt.Println("\033[32m✓ Package removed successfully\033[0m")
+			return nil
+		}
+	}
+
+	// Check for AppImage
+	homeDir, _ := os.UserHomeDir()
+	appImagePath := fmt.Sprintf("%s/.local/bin/%s.appimage", homeDir, name)
+	if _, err := os.Stat(appImagePath); err == nil {
+		fmt.Printf("Removing %s...\n", appImagePath)
+		if err := os.Remove(appImagePath); err != nil {
+			return fmt.Errorf("failed to remove AppImage: %w", err)
+		}
+		fmt.Println("\033[32m✓ AppImage removed successfully\033[0m")
+		return nil
+	}
+
+	return fmt.Errorf("application not found or unable to uninstall")
+}
+
+func (d *DownloadInstaller) uninstallWindows(appName string) error {
+	fmt.Println()
+	fmt.Println("Please uninstall via Windows Settings:")
+	fmt.Println("  Settings -> Apps -> Apps & features")
+	fmt.Printf("  Find and uninstall: %s\n", appName)
 	fmt.Println()
 	return nil
 }

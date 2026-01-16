@@ -3,6 +3,7 @@ package tools
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 
@@ -27,6 +28,7 @@ type Tool struct {
 	Category    Category
 	Website     string
 	Command     string // command to check if installed
+	AppName     string // for desktop apps: app name (e.g., "chatbox.app" on macOS)
 
 	// Installation options by method
 	InstallMethods map[installer.InstallMethod]InstallConfig
@@ -45,6 +47,10 @@ type InstallConfig struct {
 	DockerVolumes []string          // volume mappings
 	DockerName    string            // container name
 	DockerCompose string            // docker-compose repo URL (for complex apps)
+
+	// Download-specific options (for desktop apps)
+	DownloadURLs map[string]string // platform-specific download URLs: "darwin", "linux", "windows"
+	FileType     string            // file type: "dmg", "pkg", "deb", "appimage", "exe", "msi"
 }
 
 var registry = map[string]*Tool{}
@@ -59,7 +65,6 @@ func init() {
 	registerOpenWebUI()
 	registerChatGPTCLI()
 	registerCursor()
-	registerContinue()
 	registerLMStudio()
 	// CLI tools
 	registerGPTEngineer()
@@ -90,9 +95,7 @@ func init() {
 	registerMaxKB()
 	registerRAGFlow()
 	registerDBGPT()
-	registerOpenRouter()
 	registerChatGLM()
-	registerCoze()
 	registerChatWoot()
 	// AI Infra
 	registerVLLM()
@@ -119,6 +122,34 @@ func init() {
 	registerAIChat()
 	registerGoingChat()
 	registerOpenInterpreter()
+	// More AI Coding Tools
+	registerOpenCode()
+	registerWindsurf()
+	registerTabnine()
+	registerSupermaven()
+	registerPieces()
+	registerCody()
+	registerQodo()
+	registerReplit()
+	// Developer Tools (Open Source / Free Community Edition)
+	registerVSCode()
+	registerIntelliJIDEA()
+	registerPyCharm()
+	// Terminal Tools (Open Source)
+	registerWarp()
+	registerITerm2()
+	registerAlacritty()
+	registerKitty()
+	// API Tools (Open Source / Free)
+	registerPostman()
+	registerInsomnia()
+	// Database Tools (Open Source / Free)
+	registerTablePlus()
+	registerDBeaver()
+	// Productivity Tools (Free / Free for Personal Use)
+	registerRaycast()
+	registerOrbStack()
+	registerFig()
 }
 
 func registerOllama() {
@@ -240,25 +271,21 @@ func registerCursor() {
 		Category:    CategoryCoding,
 		Website:     "https://cursor.sh",
 		Command:     "cursor",
+		AppName:     "Cursor.app",
 		InstallMethods: map[installer.InstallMethod]InstallConfig{
 			installer.MethodBrew: {Package: "cursor", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://cursor.sh",
+				DownloadURLs: map[string]string{
+					"darwin":  "https://downloader.cursor.sh/mac/universal",
+					"linux":   "https://downloader.cursor.sh/linux/appImage/x64",
+					"windows": "https://downloader.cursor.sh/windows/nsis/x64",
+				},
+				FileType: "dmg",
+			},
 		},
 	})
 }
-
-func registerContinue() {
-	Register(&Tool{
-		Name:           "continue",
-		Description:    "Open-source AI code assistant for VS Code and JetBrains",
-		Category:       CategoryCoding,
-		Website:        "https://continue.dev",
-		Command:        "",
-		InstallMethods: map[installer.InstallMethod]InstallConfig{
-			// VS Code extension - manual install
-		},
-	})
-}
-
 func registerLMStudio() {
 	Register(&Tool{
 		Name:        "lmstudio",
@@ -266,8 +293,18 @@ func registerLMStudio() {
 		Category:    CategoryUI,
 		Website:     "https://lmstudio.ai",
 		Command:     "",
+		AppName:     "LM Studio.app",
 		InstallMethods: map[installer.InstallMethod]InstallConfig{
 			installer.MethodBrew: {Package: "lm-studio", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://lmstudio.ai",
+				DownloadURLs: map[string]string{
+					"darwin":  "https://releases.lmstudio.ai/darwin/arm64/latest",
+					"linux":   "https://releases.lmstudio.ai/linux/x86/latest",
+					"windows": "https://releases.lmstudio.ai/windows/x86/latest",
+				},
+				FileType: "dmg",
+			},
 		},
 	})
 }
@@ -310,11 +347,83 @@ func (t *Tool) IsInstalled() bool {
 		return t.IsComposeRunning(installDir)
 	}
 
+	// Check if installed via docker container (single container)
+	if t.IsDockerContainerInstalled() {
+		return true
+	}
+
+	// Check desktop apps (by AppName)
+	if t.AppName != "" {
+		return t.IsDesktopAppInstalled()
+	}
+
 	// Check command in PATH
 	if t.Command == "" {
 		return false
 	}
 	return installer.CheckInstalled(t.Command)
+}
+
+// IsDesktopAppInstalled checks if a desktop app is installed
+func (t *Tool) IsDesktopAppInstalled() bool {
+	p := platform.Detect()
+
+	switch p.OS {
+	case "darwin":
+		// Check /Applications
+		appPath := fmt.Sprintf("/Applications/%s", t.AppName)
+		if _, err := os.Stat(appPath); err == nil {
+			return true
+		}
+		// Also check ~/Applications
+		homeDir, _ := os.UserHomeDir()
+		userAppPath := fmt.Sprintf("%s/Applications/%s", homeDir, t.AppName)
+		if _, err := os.Stat(userAppPath); err == nil {
+			return true
+		}
+		return false
+
+	case "linux":
+		// Check common installation locations
+		locations := []string{
+			fmt.Sprintf("/usr/share/applications/%s.desktop", t.Name),
+			fmt.Sprintf("/usr/local/share/applications/%s.desktop", t.Name),
+		}
+		homeDir, _ := os.UserHomeDir()
+		if homeDir != "" {
+			locations = append(locations,
+				fmt.Sprintf("%s/.local/share/applications/%s.desktop", homeDir, t.Name),
+				fmt.Sprintf("%s/.local/bin/%s.appimage", homeDir, t.Name),
+			)
+		}
+		for _, loc := range locations {
+			if _, err := os.Stat(loc); err == nil {
+				return true
+			}
+		}
+		return false
+
+	case "windows":
+		// Check Program Files
+		programFiles := os.Getenv("ProgramFiles")
+		if programFiles != "" {
+			appPath := fmt.Sprintf("%s\\%s", programFiles, t.AppName)
+			if _, err := os.Stat(appPath); err == nil {
+				return true
+			}
+		}
+		// Check Program Files (x86)
+		programFilesX86 := os.Getenv("ProgramFiles(x86)")
+		if programFilesX86 != "" {
+			appPath := fmt.Sprintf("%s\\%s", programFilesX86, t.AppName)
+			if _, err := os.Stat(appPath); err == nil {
+				return true
+			}
+		}
+		return false
+	}
+
+	return false
 }
 
 // IsComposeRunning checks if docker-compose containers are running
@@ -376,6 +485,25 @@ func (t *Tool) IsDockerComposeInstall() bool {
 	return false
 }
 
+// IsDockerContainerInstalled checks if a Docker container is running for this tool
+func (t *Tool) IsDockerContainerInstalled() bool {
+	// Check if tool has docker installation method with container name
+	config, hasDocker := t.InstallMethods[installer.MethodDocker]
+	if !hasDocker || config.DockerName == "" {
+		return false
+	}
+
+	// Check if container exists (running or stopped)
+	cmd := exec.Command("docker", "ps", "-a", "--filter", fmt.Sprintf("name=^%s$", config.DockerName), "--format", "{{.ID}}")
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+
+	containerID := strings.TrimSpace(string(out))
+	return containerID != ""
+}
+
 // GetComposeInstallDir returns the install directory if it exists, empty string otherwise
 func (t *Tool) GetComposeInstallDir() string {
 	homeDir, err := os.UserHomeDir()
@@ -432,7 +560,22 @@ func (t *Tool) Install(preferredMethod installer.InstallMethod) error {
 		// Special handling for Download (desktop apps)
 		if method == installer.MethodDownload {
 			inst := installer.NewDownloadInstaller()
-			return inst.Install(config.Package, t.Name)
+
+			// Get platform-specific download URL
+			downloadURL := ""
+			if config.DownloadURLs != nil {
+				if url, ok := config.DownloadURLs[p.OS]; ok {
+					downloadURL = url
+				}
+			}
+
+			// Determine file type from config or URL
+			fileType := config.FileType
+			if fileType == "" && downloadURL != "" {
+				fileType = guessFileType(downloadURL, p.OS)
+			}
+
+			return inst.Install(config.Package, t.Name, downloadURL, fileType)
 		}
 
 		// Standard installation
@@ -683,8 +826,18 @@ func registerJan() {
 		Category:    CategoryUI,
 		Website:     "https://jan.ai",
 		Command:     "",
+		AppName:     "Jan.app",
 		InstallMethods: map[installer.InstallMethod]InstallConfig{
 			installer.MethodBrew: {Package: "jan", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://jan.ai",
+				DownloadURLs: map[string]string{
+					"darwin":  "https://github.com/janhq/jan/releases/download/v0.5.7/jan-mac-arm64-0.5.7.dmg",
+					"linux":   "https://github.com/janhq/jan/releases/download/v0.5.7/jan-linux-x86_64-0.5.7.AppImage",
+					"windows": "https://github.com/janhq/jan/releases/download/v0.5.7/jan-win-x64-0.5.7.exe",
+				},
+				FileType: "dmg",
+			},
 		},
 	})
 }
@@ -696,8 +849,17 @@ func registerMSDD() {
 		Category:    CategoryUI,
 		Website:     "https://msty.app",
 		Command:     "",
+		AppName:     "Msty.app",
 		InstallMethods: map[installer.InstallMethod]InstallConfig{
 			installer.MethodBrew: {Package: "msty", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://msty.app",
+				DownloadURLs: map[string]string{
+					"darwin":  "https://assets.msty.app/Msty_arm64.dmg",
+					"windows": "https://assets.msty.app/Msty_x64.exe",
+				},
+				FileType: "dmg",
+			},
 		},
 	})
 }
@@ -1063,20 +1225,6 @@ func registerDBGPT() {
 		},
 	})
 }
-
-func registerOpenRouter() {
-	Register(&Tool{
-		Name:           "openrouter",
-		Description:    "Unified API for 100+ LLM providers",
-		Category:       CategoryPlatform,
-		Website:        "https://openrouter.ai",
-		Command:        "",
-		InstallMethods: map[installer.InstallMethod]InstallConfig{
-			// Cloud service - no local install needed
-		},
-	})
-}
-
 func registerChatGLM() {
 	Register(&Tool{
 		Name:        "chatglm",
@@ -1089,20 +1237,6 @@ func registerChatGLM() {
 		},
 	})
 }
-
-func registerCoze() {
-	Register(&Tool{
-		Name:           "coze",
-		Description:    "AI bot development platform by ByteDance",
-		Category:       CategoryPlatform,
-		Website:        "https://www.coze.com",
-		Command:        "",
-		InstallMethods: map[installer.InstallMethod]InstallConfig{
-			// Cloud service - no local install needed
-		},
-	})
-}
-
 func registerChatWoot() {
 	Register(&Tool{
 		Name:        "chatwoot",
@@ -1235,12 +1369,22 @@ func registerGitHubCLI() {
 func registerCherryStudio() {
 	Register(&Tool{
 		Name:        "cherry-studio",
-		Description: "Desktop AI assistant with multi-model support",
+		Description: "AI Agent + Coding Agent + 300+ assistants desktop app",
 		Category:    CategoryUI,
 		Website:     "https://cherry-ai.com",
 		Command:     "",
+		AppName:     "Cherry Studio.app",
 		InstallMethods: map[installer.InstallMethod]InstallConfig{
-			installer.MethodDownload: {Package: "https://cherry-ai.com/download"},
+			installer.MethodDownload: {
+				Package: "https://github.com/CherryHQ/cherry-studio/releases",
+				// Official repository: github.com/CherryHQ/cherry-studio
+				DownloadURLs: map[string]string{
+					"darwin":  "https://github.com/CherryHQ/cherry-studio/releases/download/v1.7.13/Cherry-Studio-1.7.13-arm64.dmg",
+					"linux":   "https://github.com/CherryHQ/cherry-studio/releases/download/v1.7.13/Cherry-Studio_1.7.13_amd64.deb",
+					"windows": "https://github.com/CherryHQ/cherry-studio/releases/download/v1.7.13/Cherry-Studio-1.7.13-x64.exe",
+				},
+				FileType: "dmg",
+			},
 		},
 	})
 }
@@ -1252,9 +1396,19 @@ func registerChatbox() {
 		Category:    CategoryUI,
 		Website:     "https://chatboxai.app",
 		Command:     "",
+		AppName:     "chatbox.app", // macOS app name
 		InstallMethods: map[installer.InstallMethod]InstallConfig{
-			installer.MethodDownload: {Package: "https://chatboxai.app"},
-			installer.MethodBrew:     {Package: "chatbox", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://chatboxai.app",
+				// Official repository: github.com/chatboxai/chatbox
+				DownloadURLs: map[string]string{
+					"darwin":  "https://download.chatboxai.app/releases/Chatbox-1.18.3-universal.dmg",
+					"linux":   "https://download.chatboxai.app/releases/Chatbox-1.18.3-amd64.deb",
+					"windows": "https://download.chatboxai.app/releases/Chatbox-1.18.3-x64-Setup.exe",
+				},
+				FileType: "dmg",
+			},
+			installer.MethodBrew: {Package: "chatbox", Args: []string{"--cask"}},
 		},
 	})
 }
@@ -1266,8 +1420,12 @@ func registerTypingMind() {
 		Category:    CategoryUI,
 		Website:     "https://www.typingmind.com",
 		Command:     "",
+		AppName:     "TypingMind.app",
 		InstallMethods: map[installer.InstallMethod]InstallConfig{
-			installer.MethodDownload: {Package: "https://www.typingmind.com"},
+			installer.MethodDownload: {
+				Package: "https://www.typingmind.com/download",
+				// Note: TypingMind requires purchase, direct download links may not be available
+			},
 		},
 	})
 }
@@ -1338,4 +1496,419 @@ func registerOpenInterpreter() {
 			installer.MethodPip: {Package: "open-interpreter"},
 		},
 	})
+}
+
+// More AI Coding Tools
+
+func registerOpenCode() {
+	Register(&Tool{
+		Name:        "opencode",
+		Description: "Open source AI coding agent - powerful terminal-based coding assistant",
+		Category:    CategoryCoding,
+		Website:     "https://opencode.ai",
+		Command:     "opencode",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodNpm:    {Package: "opencode-ai"},
+			installer.MethodBrew:   {Package: "opencode"},
+			installer.MethodScript: {Package: "https://opencode.ai/install"},
+		},
+	})
+}
+
+func registerWindsurf() {
+	Register(&Tool{
+		Name:        "windsurf",
+		Description: "First agentic IDE by Codeium - AI-native code editor",
+		Category:    CategoryCoding,
+		Website:     "https://codeium.com/windsurf",
+		Command:     "",
+		AppName:     "Windsurf.app",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodDownload: {
+				Package: "https://codeium.com/windsurf/download",
+				// Official download page provides platform-specific installers
+			},
+		},
+	})
+}
+
+func registerTabnine() {
+	Register(&Tool{
+		Name:        "tabnine",
+		Description: "AI code assistant with focus on privacy and personalization",
+		Category:    CategoryCoding,
+		Website:     "https://www.tabnine.com",
+		Command:     "",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodDownload: {
+				Package: "https://www.tabnine.com",
+				// IDE plugin - install from marketplace
+			},
+		},
+	})
+}
+
+func registerSupermaven() {
+	Register(&Tool{
+		Name:        "supermaven",
+		Description: "Fastest AI code completion with 300K token context window",
+		Category:    CategoryCoding,
+		Website:     "https://supermaven.com",
+		Command:     "",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodDownload: {
+				Package: "https://supermaven.com/download",
+				// IDE plugin - install from marketplace
+			},
+		},
+	})
+}
+
+func registerPieces() {
+	Register(&Tool{
+		Name:        "pieces",
+		Description: "AI-powered code snippet manager and workflow tool",
+		Category:    CategoryUtility,
+		Website:     "https://pieces.app",
+		Command:     "",
+		AppName:     "Pieces.app",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodDownload: {
+				Package: "https://pieces.app/install",
+				// Desktop app with IDE plugins
+			},
+		},
+	})
+}
+
+func registerCody() {
+	Register(&Tool{
+		Name:        "cody",
+		Description: "AI coding assistant from Sourcegraph with codebase context",
+		Category:    CategoryCoding,
+		Website:     "https://sourcegraph.com/cody",
+		Command:     "",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodDownload: {
+				Package: "https://sourcegraph.com/cody",
+				// IDE plugin - install from marketplace
+			},
+		},
+	})
+}
+
+func registerQodo() {
+	Register(&Tool{
+		Name:        "qodo",
+		Description: "AI-powered code quality and testing platform (formerly CodiumAI)",
+		Category:    CategoryCoding,
+		Website:     "https://www.qodo.ai",
+		Command:     "",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodDownload: {
+				Package: "https://www.qodo.ai",
+				// IDE plugin - install from marketplace
+			},
+		},
+	})
+}
+
+func registerReplit() {
+	Register(&Tool{
+		Name:        "replit",
+		Description: "Collaborative online IDE with AI assistance",
+		Category:    CategoryCoding,
+		Website:     "https://replit.com",
+		Command:     "",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodDownload: {
+				Package: "https://replit.com/desktop",
+				// Desktop app available
+			},
+		},
+	})
+}
+
+// Developer Tools
+
+func registerVSCode() {
+	Register(&Tool{
+		Name:        "vscode",
+		Description: "Microsoft's open-source code editor (MIT License)",
+		Category:    CategoryCoding,
+		Website:     "https://code.visualstudio.com",
+		Command:     "code",
+		AppName:     "Visual Studio Code.app",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodBrew: {Package: "visual-studio-code", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://code.visualstudio.com/download",
+				DownloadURLs: map[string]string{
+					"darwin":  "https://code.visualstudio.com/sha/download?build=stable&os=darwin-universal",
+					"linux":   "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64",
+					"windows": "https://code.visualstudio.com/sha/download?build=stable&os=win32-x64-user",
+				},
+			},
+		},
+	})
+}
+
+func registerIntelliJIDEA() {
+	Register(&Tool{
+		Name:        "intellij-idea",
+		Description: "JetBrains IDE for Java - Community Edition (free & open-source)",
+		Category:    CategoryCoding,
+		Website:     "https://www.jetbrains.com/idea",
+		Command:     "",
+		AppName:     "IntelliJ IDEA CE.app",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodBrew: {Package: "intellij-idea-ce", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://www.jetbrains.com/idea/download",
+			},
+		},
+	})
+}
+
+func registerPyCharm() {
+	Register(&Tool{
+		Name:        "pycharm",
+		Description: "JetBrains IDE for Python - Community Edition (free & open-source)",
+		Category:    CategoryCoding,
+		Website:     "https://www.jetbrains.com/pycharm",
+		Command:     "",
+		AppName:     "PyCharm CE.app",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodBrew: {Package: "pycharm-ce", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://www.jetbrains.com/pycharm/download",
+			},
+		},
+	})
+}
+
+// Terminal Tools
+
+func registerWarp() {
+	Register(&Tool{
+		Name:        "warp",
+		Description: "Modern AI-powered terminal with intelligent features",
+		Category:    CategoryUtility,
+		Website:     "https://www.warp.dev",
+		Command:     "",
+		AppName:     "Warp.app",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodBrew: {Package: "warp", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://www.warp.dev",
+			},
+		},
+	})
+}
+
+func registerITerm2() {
+	Register(&Tool{
+		Name:        "iterm2",
+		Description: "Popular terminal emulator for macOS",
+		Category:    CategoryUtility,
+		Website:     "https://iterm2.com",
+		Command:     "",
+		AppName:     "iTerm.app",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodBrew: {Package: "iterm2", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://iterm2.com/downloads.html",
+			},
+		},
+	})
+}
+
+func registerAlacritty() {
+	Register(&Tool{
+		Name:        "alacritty",
+		Description: "Fast, cross-platform, GPU-accelerated terminal emulator",
+		Category:    CategoryUtility,
+		Website:     "https://alacritty.org",
+		Command:     "alacritty",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodBrew: {Package: "alacritty", Args: []string{"--cask"}},
+		},
+	})
+}
+
+func registerKitty() {
+	Register(&Tool{
+		Name:        "kitty",
+		Description: "Fast, feature-rich, GPU based terminal emulator",
+		Category:    CategoryUtility,
+		Website:     "https://sw.kovidgoyal.net/kitty",
+		Command:     "kitty",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodBrew: {Package: "kitty", Args: []string{"--cask"}},
+		},
+	})
+}
+
+// API Tools
+
+func registerPostman() {
+	Register(&Tool{
+		Name:        "postman",
+		Description: "Popular API development and testing platform",
+		Category:    CategoryUtility,
+		Website:     "https://www.postman.com",
+		Command:     "",
+		AppName:     "Postman.app",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodBrew: {Package: "postman", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://www.postman.com/downloads",
+			},
+		},
+	})
+}
+
+func registerInsomnia() {
+	Register(&Tool{
+		Name:        "insomnia",
+		Description: "Open-source API client for REST, GraphQL, and gRPC",
+		Category:    CategoryUtility,
+		Website:     "https://insomnia.rest",
+		Command:     "",
+		AppName:     "Insomnia.app",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodBrew: {Package: "insomnia", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://insomnia.rest/download",
+			},
+		},
+	})
+}
+// Database Tools
+
+func registerTablePlus() {
+	Register(&Tool{
+		Name:        "tableplus",
+		Description: "Modern database tool (free with limitations: 2 tabs, 2 windows)",
+		Category:    CategoryUtility,
+		Website:     "https://tableplus.com",
+		Command:     "",
+		AppName:     "TablePlus.app",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodBrew: {Package: "tableplus", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://tableplus.com",
+				DownloadURLs: map[string]string{
+					"darwin":  "https://tableplus.com/release/osx/tableplus_latest",
+					"windows": "https://tableplus.com/release/windows/tableplus_latest",
+				},
+			},
+		},
+	})
+}
+
+func registerDBeaver() {
+	Register(&Tool{
+		Name:        "dbeaver",
+		Description: "Free & open-source universal database tool (Apache License)",
+		Category:    CategoryUtility,
+		Website:     "https://dbeaver.io",
+		Command:     "",
+		AppName:     "DBeaver.app",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodBrew: {Package: "dbeaver-community", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://dbeaver.io/download",
+			},
+		},
+	})
+}
+
+// Productivity Tools
+
+func registerRaycast() {
+	Register(&Tool{
+		Name:        "raycast",
+		Description: "Supercharged productivity tool for macOS (free, Pro $8/mo)",
+		Category:    CategoryUtility,
+		Website:     "https://www.raycast.com",
+		Command:     "",
+		AppName:     "Raycast.app",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodBrew: {Package: "raycast", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://www.raycast.com",
+			},
+		},
+	})
+}
+
+func registerOrbStack() {
+	Register(&Tool{
+		Name:        "orbstack",
+		Description: "Fast Docker Desktop alternative (free for personal use)",
+		Category:    CategoryUtility,
+		Website:     "https://orbstack.dev",
+		Command:     "orb",
+		AppName:     "OrbStack.app",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodBrew: {Package: "orbstack", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://orbstack.dev/download",
+			},
+		},
+	})
+}
+
+func registerFig() {
+	Register(&Tool{
+		Name:        "fig",
+		Description: "Terminal autocomplete and productivity tool (now part of AWS)",
+		Category:    CategoryUtility,
+		Website:     "https://fig.io",
+		Command:     "fig",
+		InstallMethods: map[installer.InstallMethod]InstallConfig{
+			installer.MethodBrew: {Package: "fig", Args: []string{"--cask"}},
+			installer.MethodDownload: {
+				Package: "https://fig.io",
+			},
+		},
+	})
+}
+
+// guessFileType attempts to determine file type from URL extension or platform
+func guessFileType(url, osType string) string {
+	lower := strings.ToLower(url)
+
+	// Check URL extension
+	if strings.HasSuffix(lower, ".dmg") {
+		return "dmg"
+	}
+	if strings.HasSuffix(lower, ".pkg") {
+		return "pkg"
+	}
+	if strings.HasSuffix(lower, ".deb") {
+		return "deb"
+	}
+	if strings.HasSuffix(lower, ".appimage") {
+		return "appimage"
+	}
+	if strings.HasSuffix(lower, ".exe") {
+		return "exe"
+	}
+	if strings.HasSuffix(lower, ".msi") {
+		return "msi"
+	}
+
+	// Fallback to platform defaults
+	switch osType {
+	case "darwin":
+		return "dmg"
+	case "linux":
+		return "deb"
+	case "windows":
+		return "exe"
+	}
+
+	return ""
 }
