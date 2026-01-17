@@ -76,7 +76,7 @@ func promptMethodSelection(toolName string, availableMethods []installer.Install
 	choice, err := util.PromptChoice(title, options, descriptions)
 
 	if err != nil {
-		return "", fmt.Errorf("selection cancelled or invalid: %w", err)
+		return "", fmt.Errorf("selection canceled or invalid: %w", err)
 	}
 
 	return availableMethods[choice], nil

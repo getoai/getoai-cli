@@ -1784,6 +1784,7 @@ func registerInsomnia() {
 		},
 	})
 }
+
 // Database Tools
 
 func registerTablePlus() {

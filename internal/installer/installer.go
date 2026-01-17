@@ -827,7 +827,7 @@ func (d *DownloadInstaller) installDMG(dmgPath, appName string) error {
 
 	defer func() {
 		fmt.Println("Unmounting DMG...")
-		exec.Command("hdiutil", "detach", mountPoint, "-force").Run()
+		_ = exec.Command("hdiutil", "detach", mountPoint, "-force").Run()
 	}()
 
 	// Find .app in mount point
@@ -959,21 +959,6 @@ func (d *DownloadInstaller) installMSI(msiPath string) error {
 	}
 
 	return nil
-}
-
-func parseMountPoint(output string) string {
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "/Volumes/") {
-			parts := strings.Fields(line)
-			for _, part := range parts {
-				if strings.HasPrefix(part, "/Volumes/") {
-					return part
-				}
-			}
-		}
-	}
-	return ""
 }
 
 func parseMountPointFromHdiutil(output string) string {
