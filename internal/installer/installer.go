@@ -1029,22 +1029,14 @@ func (d *DownloadInstaller) installEXE(exePath string) error {
 
 	// Try NSIS style first (/S is most common)
 	fmt.Println("Attempting silent installation...")
-	cmd := exec.Command(exePath, "/S")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err == nil {
-		fmt.Println("\033[32m✓ Installation completed\033[0m")
+	if d.runCommand(exePath, "/S") == nil {
+		d.printSuccess()
 		return nil
 	}
 
 	// Try Inno Setup style
-	cmd = exec.Command(exePath, "/VERYSILENT")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err == nil {
-		fmt.Println("\033[32m✓ Installation completed\033[0m")
+	if d.runCommand(exePath, "/VERYSILENT") == nil {
+		d.printSuccess()
 		return nil
 	}
 
@@ -1053,19 +1045,27 @@ func (d *DownloadInstaller) installEXE(exePath string) error {
 	fmt.Println("Please follow the on-screen instructions to complete installation.")
 	fmt.Println()
 
-	cmd = exec.Command(exePath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
+	if err := d.runCommand(exePath); err != nil {
 		return fmt.Errorf("failed to launch installer: %w", err)
 	}
 
+	d.printSuccess()
+	return nil
+}
+
+// runCommand executes a command with stdout/stderr redirected
+func (d *DownloadInstaller) runCommand(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// printSuccess prints installation success message
+func (d *DownloadInstaller) printSuccess() {
 	fmt.Println()
 	fmt.Println("\033[32m✓ Installation completed\033[0m")
 	fmt.Println("You may need to restart your shell for the changes to take effect.")
-
-	return nil
 }
 
 func (d *DownloadInstaller) installMSI(msiPath string) error {
@@ -1078,34 +1078,26 @@ func (d *DownloadInstaller) installMSI(msiPath string) error {
 	fmt.Println("Starting automatic installation with progress display...")
 	fmt.Println()
 
-	cmd := exec.Command("msiexec", "/i", msiPath, "/passive", "/norestart")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		// If passive mode fails, try fully silent mode
-		fmt.Println("Trying fully silent installation...")
-		cmd = exec.Command("msiexec", "/i", msiPath, "/qn", "/norestart")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-
-		if err := cmd.Run(); err != nil {
-			// If silent fails, fall back to interactive
-			fmt.Println("Silent installation failed, launching interactive installer...")
-			cmd = exec.Command("msiexec", "/i", msiPath)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("failed to install MSI: %w", err)
-			}
-		}
+	// Try passive mode (shows progress bar)
+	if d.runCommand("msiexec", "/i", msiPath, "/passive", "/norestart") == nil {
+		d.printSuccess()
+		return nil
 	}
 
-	fmt.Println()
-	fmt.Println("\033[32m✓ Installation completed\033[0m")
-	fmt.Println("You may need to restart your shell for the changes to take effect.")
+	// Try fully silent mode
+	fmt.Println("Trying fully silent installation...")
+	if d.runCommand("msiexec", "/i", msiPath, "/qn", "/norestart") == nil {
+		d.printSuccess()
+		return nil
+	}
 
+	// Fall back to interactive installer
+	fmt.Println("Silent installation failed, launching interactive installer...")
+	if err := d.runCommand("msiexec", "/i", msiPath); err != nil {
+		return fmt.Errorf("failed to install MSI: %w", err)
+	}
+
+	d.printSuccess()
 	return nil
 }
 
@@ -1147,11 +1139,30 @@ func parseMountPointFromHdiutil(output string) string {
 }
 
 func getFileNameFromURL(url string) string {
+	// Split by / to get the last part
 	parts := strings.Split(url, "/")
-	if len(parts) > 0 {
-		return parts[len(parts)-1]
+	if len(parts) == 0 {
+		return "download"
 	}
-	return "download"
+
+	filename := parts[len(parts)-1]
+
+	// Remove query parameters if present
+	if idx := strings.Index(filename, "?"); idx != -1 {
+		filename = filename[:idx]
+	}
+
+	// Remove fragment if present
+	if idx := strings.Index(filename, "#"); idx != -1 {
+		filename = filename[:idx]
+	}
+
+	// If empty or looks like a domain, return default
+	if filename == "" || (!strings.Contains(filename, ".") && len(parts) <= 3) {
+		return "download"
+	}
+
+	return filename
 }
 
 func (d *DownloadInstaller) Uninstall(name string, args ...string) error {
