@@ -286,8 +286,7 @@ func registerCursor() {
 					"linux":   "https://downloader.cursor.sh/linux/appImage/x64",
 					"windows": "https://downloader.cursor.sh/windows/nsis/x64",
 				},
-				FileType: "dmg",
-			},
+				},
 		},
 	})
 }
@@ -308,8 +307,7 @@ func registerLMStudio() {
 					"linux":   "https://releases.lmstudio.ai/linux/x86/latest",
 					"windows": "https://releases.lmstudio.ai/windows/x86/latest",
 				},
-				FileType: "dmg",
-			},
+				},
 		},
 	})
 }
@@ -844,8 +842,7 @@ func registerJan() {
 					"linux":   "https://github.com/janhq/jan/releases/download/v0.5.7/jan-linux-x86_64-0.5.7.AppImage",
 					"windows": "https://github.com/janhq/jan/releases/download/v0.5.7/jan-win-x64-0.5.7.exe",
 				},
-				FileType: "dmg",
-			},
+				},
 		},
 	})
 }
@@ -866,8 +863,7 @@ func registerMSDD() {
 					"darwin":  "https://assets.msty.app/Msty_arm64.dmg",
 					"windows": "https://assets.msty.app/Msty_x64.exe",
 				},
-				FileType: "dmg",
-			},
+				},
 		},
 	})
 }
@@ -1413,9 +1409,8 @@ func registerCherryStudio() {
 				DownloadURLs: map[string]string{
 					"darwin":  "https://github.com/CherryHQ/cherry-studio/releases/download/v1.7.13/Cherry-Studio-1.7.13-arm64.dmg",
 					"linux":   "https://github.com/CherryHQ/cherry-studio/releases/download/v1.7.13/Cherry-Studio_1.7.13_amd64.deb",
-					"windows": "https://github.com/CherryHQ/cherry-studio/releases/download/v1.7.13/Cherry-Studio-1.7.13-x64.exe",
+					"windows": "https://github.com/CherryHQ/cherry-studio/releases/download/v1.7.13/Cherry-Studio-1.7.13-x64-setup.exe",
 				},
-				FileType: "dmg",
 			},
 		},
 	})
@@ -1438,7 +1433,6 @@ func registerChatbox() {
 					"linux":   "https://download.chatboxai.app/releases/Chatbox-1.18.3-amd64.deb",
 					"windows": "https://download.chatboxai.app/releases/Chatbox-1.18.3-x64-Setup.exe",
 				},
-				FileType: "dmg",
 			},
 			installer.MethodBrew: {Package: "chatbox", Args: []string{"--cask"}},
 		},

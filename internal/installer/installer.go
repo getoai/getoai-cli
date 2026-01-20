@@ -804,8 +804,35 @@ func (d *DownloadInstaller) downloadAndInstall(appName, downloadURL, fileType st
 
 	fmt.Println()
 
+	// Auto-detect file type from filename if not specified or if specified type doesn't match
+	detectedType := detectFileType(fileName)
+	if fileType == "" || detectedType != "" {
+		fileType = detectedType
+	}
+
 	// Install based on file type
 	return d.installFile(filePath, fileType, appName)
+}
+
+// detectFileType detects file type from filename extension
+func detectFileType(filename string) string {
+	filename = strings.ToLower(filename)
+	switch {
+	case strings.HasSuffix(filename, ".dmg"):
+		return "dmg"
+	case strings.HasSuffix(filename, ".pkg"):
+		return "pkg"
+	case strings.HasSuffix(filename, ".deb"):
+		return "deb"
+	case strings.HasSuffix(filename, ".exe"):
+		return "exe"
+	case strings.HasSuffix(filename, ".msi"):
+		return "msi"
+	case strings.HasSuffix(filename, ".appimage"):
+		return "appimage"
+	default:
+		return ""
+	}
 }
 
 func (d *DownloadInstaller) downloadFile(url, filepath string) error {
