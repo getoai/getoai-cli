@@ -163,6 +163,8 @@ func registerOllama() {
 			installer.MethodDownload: {Package: "https://ollama.ai/download"},
 			installer.MethodBrew:     {Package: "ollama"},
 			installer.MethodScript:   {Package: "https://ollama.ai/install.sh"},
+			installer.MethodChoco:    {Package: "ollama"},
+			installer.MethodScoop:    {Package: "ollama"},
 		},
 		PlatformOverrides: map[string]map[installer.InstallMethod]InstallConfig{
 			"darwin": {
@@ -170,6 +172,9 @@ func registerOllama() {
 			},
 			"linux": {
 				installer.MethodScript: {Package: "https://ollama.ai/install.sh"},
+			},
+			"windows": {
+				installer.MethodChoco: {Package: "ollama"},
 			},
 		},
 	})
@@ -637,14 +642,17 @@ func (t *Tool) GetAvailableMethods() []installer.InstallMethod {
 
 	// Sort: preferred method first, then by priority
 	methodPriority := map[installer.InstallMethod]int{
-		installer.MethodBrew:   1,
-		installer.MethodApt:    1,
-		installer.MethodNpm:    2,
-		installer.MethodPip:    2,
-		installer.MethodGo:     3,
-		installer.MethodScript: 4,
-		installer.MethodDocker: 5,
-		installer.MethodBinary: 6,
+		installer.MethodBrew:     1,
+		installer.MethodApt:      1,
+		installer.MethodChoco:    1, // Windows: Chocolatey (same priority as brew/apt)
+		installer.MethodScoop:    2, // Windows: Scoop (lighter alternative)
+		installer.MethodNpm:      3,
+		installer.MethodPip:      3,
+		installer.MethodGo:       4,
+		installer.MethodScript:   5,
+		installer.MethodDocker:   6,
+		installer.MethodBinary:   7,
+		installer.MethodDownload: 8, // Fallback for direct downloads
 	}
 
 	sort.Slice(methods, func(i, j int) bool {
@@ -1304,11 +1312,16 @@ func registerNode() {
 		Website:     "https://nodejs.org",
 		Command:     "node",
 		InstallMethods: map[installer.InstallMethod]InstallConfig{
-			installer.MethodBrew: {Package: "node"},
+			installer.MethodBrew:  {Package: "node"},
+			installer.MethodChoco: {Package: "nodejs.install"},
+			installer.MethodScoop: {Package: "nodejs"},
 		},
 		PlatformOverrides: map[string]map[installer.InstallMethod]InstallConfig{
 			"linux": {
 				installer.MethodApt: {Package: "nodejs"},
+			},
+			"windows": {
+				installer.MethodChoco: {Package: "nodejs.install"},
 			},
 		},
 	})
@@ -1322,11 +1335,16 @@ func registerDocker() {
 		Website:     "https://www.docker.com",
 		Command:     "docker",
 		InstallMethods: map[installer.InstallMethod]InstallConfig{
-			installer.MethodBrew: {Package: "docker", Args: []string{"--cask"}},
+			installer.MethodBrew:  {Package: "docker", Args: []string{"--cask"}},
+			installer.MethodChoco: {Package: "docker-desktop"},
+			installer.MethodScoop: {Package: "docker"},
 		},
 		PlatformOverrides: map[string]map[installer.InstallMethod]InstallConfig{
 			"linux": {
 				installer.MethodScript: {Package: "https://get.docker.com"},
+			},
+			"windows": {
+				installer.MethodChoco: {Package: "docker-desktop"},
 			},
 		},
 	})
@@ -1340,8 +1358,17 @@ func registerDockerCompose() {
 		Website:     "https://docs.docker.com/compose",
 		Command:     "docker-compose",
 		InstallMethods: map[installer.InstallMethod]InstallConfig{
-			installer.MethodBrew: {Package: "docker-compose"},
-			installer.MethodPip:  {Package: "docker-compose"},
+			installer.MethodBrew:  {Package: "docker-compose"},
+			installer.MethodPip:   {Package: "docker-compose"},
+			installer.MethodChoco: {Package: "docker-compose"},
+		},
+		PlatformOverrides: map[string]map[installer.InstallMethod]InstallConfig{
+			"linux": {
+				installer.MethodPip: {Package: "docker-compose"},
+			},
+			"windows": {
+				installer.MethodChoco: {Package: "docker-compose"},
+			},
 		},
 	})
 }
@@ -1354,11 +1381,16 @@ func registerGitHubCLI() {
 		Website:     "https://cli.github.com",
 		Command:     "gh",
 		InstallMethods: map[installer.InstallMethod]InstallConfig{
-			installer.MethodBrew: {Package: "gh"},
+			installer.MethodBrew:  {Package: "gh"},
+			installer.MethodChoco: {Package: "gh"},
+			installer.MethodScoop: {Package: "gh"},
 		},
 		PlatformOverrides: map[string]map[installer.InstallMethod]InstallConfig{
 			"linux": {
 				installer.MethodApt: {Package: "gh"},
+			},
+			"windows": {
+				installer.MethodChoco: {Package: "gh"},
 			},
 		},
 	})
@@ -1640,7 +1672,9 @@ func registerVSCode() {
 		Command:     "code",
 		AppName:     "Visual Studio Code.app",
 		InstallMethods: map[installer.InstallMethod]InstallConfig{
-			installer.MethodBrew: {Package: "visual-studio-code", Args: []string{"--cask"}},
+			installer.MethodBrew:  {Package: "visual-studio-code", Args: []string{"--cask"}},
+			installer.MethodChoco: {Package: "vscode"},
+			installer.MethodScoop: {Package: "vscode"},
 			installer.MethodDownload: {
 				Package: "https://code.visualstudio.com/download",
 				DownloadURLs: map[string]string{
@@ -1648,6 +1682,11 @@ func registerVSCode() {
 					"linux":   "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64",
 					"windows": "https://code.visualstudio.com/sha/download?build=stable&os=win32-x64-user",
 				},
+			},
+		},
+		PlatformOverrides: map[string]map[installer.InstallMethod]InstallConfig{
+			"windows": {
+				installer.MethodChoco: {Package: "vscode"},
 			},
 		},
 	})

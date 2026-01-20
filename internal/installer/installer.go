@@ -173,6 +173,56 @@ func (a *AptInstaller) Uninstall(name string, args ...string) error {
 	return a.RunCommand("sudo", "apt-get", "remove", "-y", name)
 }
 
+// ChocoInstaller - Chocolatey package manager for Windows
+type ChocoInstaller struct {
+	*BaseInstaller
+}
+
+func NewChocoInstaller() *ChocoInstaller {
+	return &ChocoInstaller{BaseInstaller: NewBaseInstaller()}
+}
+
+func (c *ChocoInstaller) Name() string { return "choco" }
+
+func (c *ChocoInstaller) IsAvailable() bool {
+	return c.platform.HasChoco
+}
+
+func (c *ChocoInstaller) Install(name string, args ...string) error {
+	// Build install command with -y flag for non-interactive
+	allArgs := append([]string{"install", name, "-y"}, args...)
+	return c.RunCommand("choco", allArgs...)
+}
+
+func (c *ChocoInstaller) Uninstall(name string, args ...string) error {
+	return c.RunCommand("choco", "uninstall", name, "-y")
+}
+
+// ScoopInstaller - Scoop package manager for Windows
+type ScoopInstaller struct {
+	*BaseInstaller
+}
+
+func NewScoopInstaller() *ScoopInstaller {
+	return &ScoopInstaller{BaseInstaller: NewBaseInstaller()}
+}
+
+func (s *ScoopInstaller) Name() string { return "scoop" }
+
+func (s *ScoopInstaller) IsAvailable() bool {
+	return s.platform.HasScoop
+}
+
+func (s *ScoopInstaller) Install(name string, args ...string) error {
+	// Scoop is non-interactive by default, no -y flag needed
+	allArgs := append([]string{"install", name}, args...)
+	return s.RunCommand("scoop", allArgs...)
+}
+
+func (s *ScoopInstaller) Uninstall(name string, args ...string) error {
+	return s.RunCommand("scoop", "uninstall", name)
+}
+
 // Npm Installer
 type NpmInstaller struct {
 	*BaseInstaller
@@ -1108,6 +1158,10 @@ func GetInstaller(method InstallMethod) (Installer, error) {
 		inst = NewBrewInstaller()
 	case MethodApt:
 		inst = NewAptInstaller()
+	case MethodChoco:
+		inst = NewChocoInstaller()
+	case MethodScoop:
+		inst = NewScoopInstaller()
 	case MethodNpm:
 		inst = NewNpmInstaller()
 	case MethodPip:
