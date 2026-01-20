@@ -299,6 +299,47 @@ getoai status nonexistent-tool
 - Non-installed tools show "not installed"
 - Unknown tools show error with suggestions
 
+### Test 16: Automatic Installation for Desktop Apps
+
+Test automatic installation of desktop applications via direct download.
+
+**Prerequisites:** No package managers needed for this test
+
+```bash
+getoai install cursor
+# or
+getoai install windsurf
+```
+
+**Expected Behavior:**
+1. Downloads .exe installer to temp directory
+2. Shows download progress with curl
+3. Attempts silent installation:
+   - First tries `/S` flag (NSIS)
+   - Then tries `/VERYSILENT` (Inno Setup)
+4. If silent fails, launches interactive installer with clear message:
+   - "Silent installation not supported, launching interactive installer..."
+   - "Please follow the on-screen instructions to complete installation."
+5. Shows success message: "✓ Installation completed"
+6. Reminds user: "You may need to restart your shell for the changes to take effect."
+
+**For MSI packages:**
+```bash
+# If any tool uses MSI installer
+getoai install <tool-with-msi>
+```
+
+**Expected Behavior:**
+1. Uses `/passive` mode (shows progress bar, no interaction needed)
+2. Falls back to `/qn` (fully silent) if passive fails
+3. Falls back to interactive if silent modes fail
+4. Prevents automatic system restart (`/norestart`)
+
+**Verification:**
+- Desktop app appears in Start Menu
+- Command line tool available (if applicable)
+- Installation completes without errors
+
 ## Expected Overall Behavior
 
 ### Method Priority on Windows
@@ -324,6 +365,32 @@ When multiple methods are available, priority order:
 - **PlatformOverrides** ensure Windows uses appropriate methods
 - Linux/macOS-specific methods (apt, brew) not shown on Windows
 - Windows-specific packages (docker-desktop vs docker) handled correctly
+
+### Automatic Installation for Desktop Apps
+
+For desktop applications installed via the download method:
+
+**EXE Installers:**
+- Automatically attempts silent installation using common parameters:
+  - `/S` (NSIS installers - most common)
+  - `/VERYSILENT` (Inno Setup installers)
+- Falls back to interactive installation if silent mode not supported
+- Provides clear feedback during installation process
+
+**MSI Installers:**
+- Uses `/passive` mode by default (unattended with progress bar)
+- Falls back to `/qn` (fully silent) if passive mode fails
+- Falls back to interactive mode if silent installation fails
+- Automatically prevents system restart during installation (`/norestart`)
+
+**Installation Flow:**
+1. Download the installer to temp directory
+2. Attempt automatic/silent installation
+3. Display progress and status messages
+4. Clean up installer file after completion
+5. Notify user if shell restart needed
+
+This means desktop apps can be installed with a single command, without manual download and installation steps.
 
 ## Tools Working on Windows
 
@@ -456,6 +523,10 @@ Testing is successful when:
 - ✅ Uninstall functionality works for Windows package managers
 - ✅ Python/Node.js/Go tools work via pip/npm/go install
 - ✅ Download method works as fallback
+- ✅ EXE installers attempt silent installation automatically
+- ✅ MSI installers use passive/silent mode by default
+- ✅ Interactive installation launched if silent mode fails
+- ✅ Desktop apps install successfully via download method
 
 ## Additional Testing Notes
 

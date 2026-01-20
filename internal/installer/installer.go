@@ -990,12 +990,53 @@ func (d *DownloadInstaller) installAppImage(appImagePath, appName string) error 
 }
 
 func (d *DownloadInstaller) installEXE(exePath string) error {
-	fmt.Println("Launching installer...")
+	fmt.Println("Installing EXE package...")
 	fmt.Println()
 
-	if err := exec.Command(exePath).Run(); err != nil {
+	// Try silent installation with common parameters
+	// Different installers use different silent flags:
+	// - NSIS: /S
+	// - Inno Setup: /VERYSILENT, /SILENT
+	// - InstallShield: /s, /silent
+	// - WiX: /quiet
+
+	// Try NSIS style first (/S is most common)
+	fmt.Println("Attempting silent installation...")
+	cmd := exec.Command(exePath, "/S")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err == nil {
+		fmt.Println("\033[32m✓ Installation completed\033[0m")
+		return nil
+	}
+
+	// Try Inno Setup style
+	cmd = exec.Command(exePath, "/VERYSILENT")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err == nil {
+		fmt.Println("\033[32m✓ Installation completed\033[0m")
+		return nil
+	}
+
+	// If silent installation fails, launch interactive installer
+	fmt.Println("Silent installation not supported, launching interactive installer...")
+	fmt.Println("Please follow the on-screen instructions to complete installation.")
+	fmt.Println()
+
+	cmd = exec.Command(exePath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to launch installer: %w", err)
 	}
+
+	fmt.Println()
+	fmt.Println("\033[32m✓ Installation completed\033[0m")
+	fmt.Println("You may need to restart your shell for the changes to take effect.")
 
 	return nil
 }
@@ -1004,9 +1045,39 @@ func (d *DownloadInstaller) installMSI(msiPath string) error {
 	fmt.Println("Installing MSI package...")
 	fmt.Println()
 
-	if err := exec.Command("msiexec", "/i", msiPath).Run(); err != nil {
-		return fmt.Errorf("failed to install MSI: %w", err)
+	// Use passive mode (/passive) for automatic installation with progress display
+	// /passive: unattended mode with progress bar
+	// /norestart: do not restart after installation
+	fmt.Println("Starting automatic installation with progress display...")
+	fmt.Println()
+
+	cmd := exec.Command("msiexec", "/i", msiPath, "/passive", "/norestart")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		// If passive mode fails, try fully silent mode
+		fmt.Println("Trying fully silent installation...")
+		cmd = exec.Command("msiexec", "/i", msiPath, "/qn", "/norestart")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			// If silent fails, fall back to interactive
+			fmt.Println("Silent installation failed, launching interactive installer...")
+			cmd = exec.Command("msiexec", "/i", msiPath)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("failed to install MSI: %w", err)
+			}
+		}
 	}
+
+	fmt.Println()
+	fmt.Println("\033[32m✓ Installation completed\033[0m")
+	fmt.Println("You may need to restart your shell for the changes to take effect.")
 
 	return nil
 }
