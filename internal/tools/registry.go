@@ -286,7 +286,7 @@ func registerCursor() {
 					"linux":   "https://downloader.cursor.sh/linux/appImage/x64",
 					"windows": "https://downloader.cursor.sh/windows/nsis/x64",
 				},
-				},
+			},
 		},
 	})
 }
@@ -307,7 +307,7 @@ func registerLMStudio() {
 					"linux":   "https://releases.lmstudio.ai/linux/x86/latest",
 					"windows": "https://releases.lmstudio.ai/windows/x86/latest",
 				},
-				},
+			},
 		},
 	})
 }
@@ -842,7 +842,7 @@ func registerJan() {
 					"linux":   "https://github.com/janhq/jan/releases/download/v0.5.7/jan-linux-x86_64-0.5.7.AppImage",
 					"windows": "https://github.com/janhq/jan/releases/download/v0.5.7/jan-win-x64-0.5.7.exe",
 				},
-				},
+			},
 		},
 	})
 }
@@ -863,7 +863,7 @@ func registerMSDD() {
 					"darwin":  "https://assets.msty.app/Msty_arm64.dmg",
 					"windows": "https://assets.msty.app/Msty_x64.exe",
 				},
-				},
+			},
 		},
 	})
 }
